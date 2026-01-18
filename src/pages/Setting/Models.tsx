@@ -67,12 +67,14 @@ export default function SettingModels() {
 				: undefined,
 			provider_id: p.provider_id ?? undefined,
 			prefer: p.prefer ?? false,
+			availableModels: [] as { id: string; name: string }[],
 		}))
 	);
 	const [showApiKey, setShowApiKey] = useState(() =>
 		INIT_PROVODERS.filter((p) => p.id !== "local").map(() => false)
 	);
 	const [loading, setLoading] = useState<number | null>(null);
+	const [fetchingModels, setFetchingModels] = useState<number | null>(null);
 	const [errors, setErrors] = useState<
 		{ apiKey?: string; apiHost?: string; model_type?: string; externalConfig?: string }[]
 	>(() =>
@@ -313,6 +315,51 @@ export default function SettingModels() {
 			handleSwitch(idx, true);
 		} finally {
 			setLoading(null);
+		}
+	};
+
+	// Fetch available models for providers that support it (e.g., GitHub Copilot)
+	const handleFetchModels = async (idx: number) => {
+		const { apiKey, apiHost } = form[idx];
+		const item = items[idx];
+
+		if (!apiKey || apiKey.trim() === "") {
+			setErrors((prev) => {
+				const next = [...prev];
+				if (!next[idx]) next[idx] = {} as any;
+				next[idx].apiKey = t("setting.api-key-can-not-be-empty");
+				return next;
+			});
+			return;
+		}
+
+		setFetchingModels(idx);
+		try {
+			const res = await fetchPost("/model/list", {
+				model_platform: item.id,
+				api_key: apiKey,
+				url: apiHost || undefined,
+			});
+
+			if (res.models && Array.isArray(res.models)) {
+				setForm((f) =>
+					f.map((fi, i) =>
+						i === idx
+							? { ...fi, availableModels: res.models }
+							: fi
+					)
+				);
+				const modelsCount = res.models?.length || 0;
+				toast.success(t("setting.models-fetched-successfully") || `Found ${modelsCount} models`);
+			} else {
+				toast.error(t("setting.no-models-found") || "No models found");
+			}
+		} catch (e: any) {
+			console.error("Failed to fetch models:", e);
+			const errorMessage = e?.detail?.message || e?.message || t("setting.failed-to-fetch-models") || "Failed to fetch models";
+			toast.error(errorMessage);
+		} finally {
+			setFetchingModels(null);
 		}
 	};
 
@@ -567,6 +614,7 @@ export default function SettingModels() {
 							: undefined,
 						provider_id: undefined,
 						prefer: false,
+						availableModels: [],
 					};
 				})
 			);
@@ -916,30 +964,108 @@ export default function SettingModels() {
 											);
 										}}
 									/>
-									{/* Model Type Setting */}
-									<Input
-										id={`modelType-${item.id}`}
-										size="default"
-										title="Model Type Setting"
-										state={errors[idx]?.model_type ? "error" : "default"}
-										note={errors[idx]?.model_type ?? undefined}
-										placeholder={`${t("setting.enter-your-model-type")} ${item.name
-											} ${t("setting.model-type")}`}
-										value={form[idx].model_type}
-										onChange={(e) => {
-											const v = e.target.value;
-											setForm((f) =>
-												f.map((fi, i) =>
-													i === idx ? { ...fi, model_type: v } : fi
-												)
-											);
-											setErrors((errs) =>
-												errs.map((er, i) =>
-													i === idx ? { ...er, model_type: "" } : er
-												)
-											);
-										}}
-									/>
+									{/* Model Type Setting - with fetch models support for GitHub Copilot */}
+									{item.id === "github-copilot" ? (
+										<div className="w-full flex flex-col gap-2">
+											<div className="flex items-end gap-2">
+												<div className="flex-1">
+													{form[idx].availableModels && form[idx].availableModels.length > 0 ? (
+														<Select
+															value={form[idx].model_type}
+															onValueChange={(v) => {
+																setForm((f) =>
+																	f.map((fi, i) =>
+																		i === idx ? { ...fi, model_type: v } : fi
+																	)
+																);
+																setErrors((errs) =>
+																	errs.map((er, i) =>
+																		i === idx ? { ...er, model_type: "" } : er
+																	)
+																);
+															}}
+														>
+															<SelectTrigger 
+																size="default" 
+																title={t("setting.model-type")}
+																state={errors[idx]?.model_type ? "error" : undefined}
+																note={errors[idx]?.model_type ?? undefined}
+															>
+																<SelectValue placeholder={t("setting.select-model")} />
+															</SelectTrigger>
+															<SelectContent>
+																{form[idx].availableModels.map((model: { id: string; name: string }) => (
+																	<SelectItem key={model.id} value={model.id}>
+																		{model.name || model.id}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													) : (
+														<Input
+															id={`modelType-${item.id}`}
+															size="default"
+															title={t("setting.model-type")}
+															state={errors[idx]?.model_type ? "error" : "default"}
+															note={errors[idx]?.model_type ?? undefined}
+															placeholder={t("setting.fetch-models-first")}
+															value={form[idx].model_type}
+															onChange={(e) => {
+																const v = e.target.value;
+																setForm((f) =>
+																	f.map((fi, i) =>
+																		i === idx ? { ...fi, model_type: v } : fi
+																	)
+																);
+																setErrors((errs) =>
+																	errs.map((er, i) =>
+																		i === idx ? { ...er, model_type: "" } : er
+																	)
+																);
+															}}
+														/>
+													)}
+												</div>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => handleFetchModels(idx)}
+													disabled={fetchingModels === idx || !form[idx].apiKey}
+													className="shrink-0"
+												>
+													{fetchingModels === idx ? (
+														<Loader2 className="w-4 h-4 animate-spin" />
+													) : (
+														t("setting.fetch-models")
+													)}
+												</Button>
+											</div>
+										</div>
+									) : (
+										<Input
+											id={`modelType-${item.id}`}
+											size="default"
+											title="Model Type Setting"
+											state={errors[idx]?.model_type ? "error" : "default"}
+											note={errors[idx]?.model_type ?? undefined}
+											placeholder={`${t("setting.enter-your-model-type")} ${item.name
+												} ${t("setting.model-type")}`}
+											value={form[idx].model_type}
+											onChange={(e) => {
+												const v = e.target.value;
+												setForm((f) =>
+													f.map((fi, i) =>
+														i === idx ? { ...fi, model_type: v } : fi
+													)
+												);
+												setErrors((errs) =>
+													errs.map((er, i) =>
+														i === idx ? { ...er, model_type: "" } : er
+													)
+												);
+											}}
+										/>
+									)}
 									{/* externalConfig render */}
 									{item.externalConfig &&
 										form[idx].externalConfig &&
