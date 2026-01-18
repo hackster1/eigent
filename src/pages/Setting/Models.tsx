@@ -349,7 +349,8 @@ export default function SettingModels() {
 							: fi
 					)
 				);
-				toast.success(t("setting.models-fetched-successfully") || `Found ${res.models.length} models`);
+				const modelsCount = res.models?.length || 0;
+				toast.success(t("setting.models-fetched-successfully") || `Found ${modelsCount} models`);
 			} else {
 				toast.error(t("setting.no-models-found") || "No models found");
 			}

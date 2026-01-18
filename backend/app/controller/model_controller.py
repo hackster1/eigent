@@ -4,11 +4,14 @@ from app.component.model_validation import create_agent
 from app.model.chat import PLATFORM_MAPPING
 from camel.types import ModelType
 from app.component.error_format import normalize_error_to_openai_format
+from app.component.environment import env
 from utils import traceroot_wrapper as traceroot
 import httpx
 
 logger = traceroot.get_logger("model_controller")
 
+# Configurable integration ID for GitHub Copilot
+COPILOT_INTEGRATION_ID = env("COPILOT_INTEGRATION_ID", "eigent-app")
 
 router = APIRouter()
 
@@ -177,7 +180,7 @@ async def list_models(request: ListModelsRequest):
                     headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
-                        "Copilot-Integration-Id": "eigent-app",
+                        "Copilot-Integration-Id": COPILOT_INTEGRATION_ID,
                     }
                 )
                 
@@ -195,9 +198,10 @@ async def list_models(request: ListModelsRequest):
                 data = response.json()
                 models = []
                 for model in data.get("data", []):
+                    model_id = model.get("id", "")
                     models.append(ModelInfo(
-                        id=model.get("id", ""),
-                        name=model.get("id", ""),
+                        id=model_id,
+                        name=model.get("name", model_id),
                         owned_by=model.get("owned_by"),
                     ))
                 
@@ -231,9 +235,10 @@ async def list_models(request: ListModelsRequest):
                 data = response.json()
                 models = []
                 for model in data.get("data", []):
+                    model_id = model.get("id", "")
                     models.append(ModelInfo(
-                        id=model.get("id", ""),
-                        name=model.get("id", ""),
+                        id=model_id,
+                        name=model.get("name", model_id),
                         owned_by=model.get("owned_by"),
                     ))
                 
