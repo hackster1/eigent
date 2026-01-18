@@ -114,5 +114,14 @@ export const INIT_PROVODERS: Provider[] = [
     hostPlaceHolder: "e.g. https://api.x.ai/v1",
     is_valid: false,
     model_type: ""
+  },
+  {
+    id: 'github-copilot',
+    name: 'GitHub Copilot',
+    apiKey: '',
+    apiHost: 'https://api.githubcopilot.com',
+    description: "GitHub Copilot API configuration. Use your Copilot token.",
+    is_valid: false,
+    model_type: ""
   }
 ]

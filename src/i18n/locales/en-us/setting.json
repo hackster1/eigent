@@ -189,7 +189,14 @@
 	"failed-to-delete-cookies": "Failed to delete cookies. Please try again.",
 	"confirm-delete-all-cookies": "Are you sure you want to delete all cookies? This action cannot be undone.",
 	"all-cookies-deleted": "All cookies have been deleted successfully.",
-	"cookie-delete-warning": "Note: Deleting cookies will log you out of the associated websites. You may need to restart the browser to see changes take effect."
+	"cookie-delete-warning": "Note: Deleting cookies will log you out of the associated websites. You may need to restart the browser to see changes take effect.",
+
+	"fetch-models": "Fetch Models",
+	"select-model": "Select a model",
+	"fetch-models-first": "Enter API key and click Fetch Models",
+	"models-fetched-successfully": "Models fetched successfully",
+	"no-models-found": "No models found",
+	"failed-to-fetch-models": "Failed to fetch models"
 	}
 
 

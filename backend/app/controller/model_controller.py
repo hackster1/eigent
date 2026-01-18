@@ -5,6 +5,7 @@ from app.model.chat import PLATFORM_MAPPING
 from camel.types import ModelType
 from app.component.error_format import normalize_error_to_openai_format
 from utils import traceroot_wrapper as traceroot
+import httpx
 
 logger = traceroot.get_logger("model_controller")
 
@@ -124,3 +125,138 @@ async def validate_model(request: ValidateModelRequest):
     logger.info("Model validation completed", extra={"platform": platform, "model_type": model_type, "is_valid": is_valid, "is_tool_calls": is_tool_calls})
 
     return result
+
+
+class ListModelsRequest(BaseModel):
+    api_key: str = Field(..., description="API key for the provider")
+    url: str | None = Field(None, description="API endpoint URL")
+    model_platform: str = Field(..., description="Model platform (e.g., github-copilot)")
+
+
+class ModelInfo(BaseModel):
+    id: str = Field(..., description="Model ID")
+    name: str = Field(..., description="Model name")
+    owned_by: str | None = Field(None, description="Model owner")
+
+
+class ListModelsResponse(BaseModel):
+    models: list[ModelInfo] = Field(..., description="List of available models")
+
+
+@router.post("/model/list")
+@traceroot.trace()
+async def list_models(request: ListModelsRequest):
+    """List available models from a provider.
+    
+    For GitHub Copilot, this fetches the list of available models from the Copilot API.
+    """
+    platform = request.model_platform
+    api_key = request.api_key
+    url = request.url
+
+    logger.info("Listing models", extra={"platform": platform, "has_url": url is not None})
+
+    if not api_key or api_key.strip() == "":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "API key is required",
+                "error_code": "missing_api_key",
+            }
+        )
+
+    try:
+        if platform == "github-copilot":
+            # GitHub Copilot uses OpenAI-compatible /models endpoint
+            base_url = url if url else "https://api.githubcopilot.com"
+            models_url = f"{base_url.rstrip('/')}/models"
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    models_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "Copilot-Integration-Id": "eigent-app",
+                    }
+                )
+                
+                if response.status_code != 200:
+                    error_text = response.text
+                    logger.error("Failed to fetch models from GitHub Copilot", extra={"status": response.status_code, "error": error_text})
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail={
+                            "message": f"Failed to fetch models: {error_text}",
+                            "error_code": "fetch_models_failed",
+                        }
+                    )
+                
+                data = response.json()
+                models = []
+                for model in data.get("data", []):
+                    models.append(ModelInfo(
+                        id=model.get("id", ""),
+                        name=model.get("id", ""),
+                        owned_by=model.get("owned_by"),
+                    ))
+                
+                logger.info("Successfully fetched models from GitHub Copilot", extra={"count": len(models)})
+                return ListModelsResponse(models=models)
+        else:
+            # For other OpenAI-compatible providers
+            base_url = url if url else "https://api.openai.com/v1"
+            models_url = f"{base_url.rstrip('/')}/models"
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    models_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    }
+                )
+                
+                if response.status_code != 200:
+                    error_text = response.text
+                    logger.error("Failed to fetch models", extra={"platform": platform, "status": response.status_code, "error": error_text})
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail={
+                            "message": f"Failed to fetch models: {error_text}",
+                            "error_code": "fetch_models_failed",
+                        }
+                    )
+                
+                data = response.json()
+                models = []
+                for model in data.get("data", []):
+                    models.append(ModelInfo(
+                        id=model.get("id", ""),
+                        name=model.get("id", ""),
+                        owned_by=model.get("owned_by"),
+                    ))
+                
+                logger.info("Successfully fetched models", extra={"platform": platform, "count": len(models)})
+                return ListModelsResponse(models=models)
+                
+    except httpx.RequestError as e:
+        logger.error("Network error while fetching models", extra={"platform": platform, "error": str(e)}, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": f"Network error: {str(e)}",
+                "error_code": "network_error",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Unexpected error while fetching models", extra={"platform": platform, "error": str(e)}, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": f"Unexpected error: {str(e)}",
+                "error_code": "unexpected_error",
+            }
+        )

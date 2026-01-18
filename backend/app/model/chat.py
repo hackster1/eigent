@@ -36,6 +36,7 @@ McpServers = dict[Literal["mcpServers"], dict[str, dict]]
 
 PLATFORM_MAPPING = {
     "Z.ai": "openai-compatible-model",
+    "github-copilot": "openai-compatible-model",
 }
 
 class Chat(BaseModel):
